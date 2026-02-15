@@ -3,13 +3,12 @@ const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const GoalFollow = goals.GoalFollow;
 const http = require('http');
 
-// Render canlı tutma ve Port ayarı
 const port = process.env.PORT || 8080;
 http.createServer((req, res) => { res.write('Bot Aktif'); res.end(); }).listen(port);
 
-const OYUN_SIFRESI = '21hg21'; // Buraya kendi şifreni yaz
-const SAHIBI = 'pire'; // Senin adın (küçük harf)
-let teamChatAcik = true; // Takım sohbeti bildirim durumu
+const OYUN_SIFRESI = '21hg21'; 
+const SAHIBI = 'pire'; 
+let botTeamChatModunda = false; // Botun şu an hangi modda olduğunu tutar
 
 function botuBaslat() {
     const bot = mineflayer.createBot({
@@ -21,100 +20,75 @@ function botuBaslat() {
 
     bot.loadPlugin(pathfinder);
 
-    // Geri bildirim fonksiyonu
+    // Botun mesaj gönderme motoru
     const botCevapVer = (mesaj) => {
-        if (teamChatAcik) {
-            bot.chat(`/teamchat ${mesaj}`);
-        }
+        // Eğer bot teamchat modundaysa direk yazar, değilse genelden yazar
+        bot.chat(mesaj); 
     };
 
     bot.on('login', () => {
-        console.log(">>> [LOG] Sunucuya girildi.");
         setTimeout(() => bot.chat(`/login ${OYUN_SIFRESI}`), 6000);
     });
 
     bot.on('messagestr', (fullMsg) => {
         const msg = fullMsg.toLowerCase();
-        console.log(`[SUNUCU LOG]: ${fullMsg}`); // Logları Render'dan takip edebilirsin
-
-        // --- 1. OTOMATİK TAKIM KATILMA SİSTEMİ ---
-        // Eğer mesajda senin adın ve 'davet'/'invite' kelimesi geçiyorsa
-        if (msg.includes(SAHIBI) && (msg.includes('davet') || msg.includes('invite'))) {
-            console.log(">>> [TAKIM] Davet yakalandı, katılım sağlanıyor...");
-            bot.chat('/team join &4thyfanclub'); 
-            setTimeout(() => {
-                botCevapVer('Takıma katıldım, emirlerini bekliyorum!');
-            }, 3000);
-            return;
-        }
-
-        // --- 2. KOMUT DİNLEME (Sadece Sahibi İçin) ---
+        
         if (msg.includes(SAHIBI)) {
             
-            // TEAMCHAT KONTROL
+            // --- MOD DEĞİŞTİRME KOMUTLARI ---
+            if (msg.includes('teamchat aç')) {
+                if (!botTeamChatModunda) {
+                    bot.chat('/teamchat'); // Modu açmak için komutu gönderir
+                    botTeamChatModunda = true;
+                    console.log(">>> [MOD] Teamchat modu AKTİF.");
+                    // Mod açıldıktan kısa süre sonra onay verir
+                    setTimeout(() => bot.chat('Bildirimler artık takım sohbetine gelecek.'), 1000);
+                }
+                return;
+            }
+
             if (msg.includes('teamchat kapat')) {
-                teamChatAcik = false;
-                bot.chat('/say Teamchat bildirimleri kapatıldı.');
-            }
-            else if (msg.includes('teamchat aç')) {
-                teamChatAcik = true;
-                botCevapVer('Bildirimler artık buradan yapılacak.');
+                if (botTeamChatModunda) {
+                    bot.chat('/teamchat'); // Modu kapatmak için tekrar gönderir
+                    botTeamChatModunda = false;
+                    console.log(">>> [MOD] Teamchat modu KAPALI.");
+                    setTimeout(() => bot.chat('Bildirimler artık genel sohbete gelecek.'), 1000);
+                }
+                return;
             }
 
-            // TPA KOMUTU
-            else if (msg.includes('tpa')) {
+            // --- DİĞER KOMUTLAR ---
+            if (msg.includes('tpa')) {
                 bot.chat(`/tpa ${SAHIBI}`);
-                botCevapVer(`Sana TPA isteği gönderdim, ${SAHIBI}.`);
+                botCevapVer('TPA isteği gönderildi.');
             }
-
-            // HOME KOMUTU (Örn: pire home orman)
             else if (msg.includes('home')) {
-                const parcalar = msg.split('home');
-                const ev = parcalar[1] ? parcalar[1].trim() : '';
+                const ev = msg.split('home')[1]?.trim();
                 if (ev) {
                     bot.chat(`/home ${ev}`);
-                    botCevapVer(`${ev} evine ışınlanıyorum.`);
+                    botCevapVer(`${ev} evine gidiliyor.`);
                 }
             }
-
-            // SÖYLE KOMUTU (Genel sohbete yazdırır)
-            else if (msg.includes('söyle')) {
-                const parcalar = fullMsg.split('söyle'); // Büyük/küçük harf koruması için fullMsg
-                const soz = parcalar[1] ? parcalar[1].trim() : '';
-                if (soz) {
-                    bot.chat(soz);
-                    botCevapVer('Mesajını genel sohbete ilettim.');
-                }
-            }
-
-            // TAKİPET KOMUTU
             else if (msg.includes('takipet')) {
                 const target = bot.players[SAHIBI]?.entity;
                 if (target) {
                     const mcData = require('minecraft-data')(bot.version);
-                    const movements = new Movements(bot, mcData);
-                    bot.pathfinder.setMovements(movements);
                     bot.pathfinder.setGoal(new GoalFollow(target, 2), true);
-                    botCevapVer('Geliyorum, peşindeyim!');
-                } else {
-                    botCevapVer('Seni göremiyorum, biraz yanıma yaklaş!');
+                    botCevapVer('Seni takip ediyorum.');
                 }
             }
-
-            // DUR KOMUTU
             else if (msg.includes('dur')) {
                 bot.pathfinder.setGoal(null);
-                botCevapVer('Olduğum yerde bekliyorum.');
+                botCevapVer('Duruyorum.');
+            }
+            else if (msg.includes('söyle')) {
+                const soz = fullMsg.split('söyle')[1]?.trim();
+                if (soz) bot.chat(soz);
             }
         }
     });
 
-    bot.on('spawn', () => console.log(">>> [BAŞARILI] Bot oyunda ve seni dinliyor!"));
-    bot.on('end', () => {
-        console.log(">>> [BAĞLANTI KESİLDİ] 10 saniye sonra tekrar denenecek...");
-        setTimeout(botuBaslat, 10000);
-    });
-    bot.on('error', (err) => console.log("Hata:", err));
+    bot.on('spawn', () => console.log(">>> BOT HAZIR VE KOMUT BEKLİYOR!"));
+    bot.on('end', () => setTimeout(botuBaslat, 10000));
 }
-
 botuBaslat();
