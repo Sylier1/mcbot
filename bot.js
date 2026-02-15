@@ -18,7 +18,7 @@ server.listen(PORT);
 const bot = mineflayer.createBot({
     host: 'oyna.wrus.net',
     username: 'thyfanclub',
-    version: '1.21.11',
+    version: false,
     disableChatSigning: true
 });
 
@@ -67,4 +67,5 @@ bot.on('messagestr', (message) => {
         if (msg.includes('dur')) bot.pathfinder.setGoal(null);
     }
 });
+
 
