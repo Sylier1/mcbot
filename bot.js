@@ -1,43 +1,69 @@
 const mineflayer = require('mineflayer');
+const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const http = require('http');
 
-// --- RENDER AYARI ---
-http.createServer((req, res) => { res.end('Bot Aktif!'); }).listen(process.env.PORT || 3000);
+// --- AYARLAR ---
+const SIFRE = '21hg21'; // Botun sunucu şifresi
+const SAHIP_ISMI = 'pire';
 
-function createBot() {
-    console.log("[SİSTEM] Sunucuya son kez sızmayı deniyorum...");
+// --- RENDER UYANDIRMA SERVISI ---
+const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Bot Aktif!\n');
+});
+const PORT = process.env.PORT || 3000;
+server.listen(PORT);
+
+// --- BOT KURULUMU ---
+const bot = mineflayer.createBot({
+    host: 'oyna.wrus.net',
+    username: 'thyfanclub',
+    version: '1.21.11',
+    disableChatSigning: true
+});
+
+bot.loadPlugin(pathfinder);
+
+// --- OTOMATIK LOGIN SISTEMI ---
+bot.on('messagestr', (message) => {
+    const msg = message.toLowerCase();
     
-    const bot = mineflayer.createBot({
-        host: 'oyna.wrus.net',
-        username: 'thyfanclub',
-        // Sürümü tamamen boş bırakıyoruz, sunucu ne derse onu kabul etsin
-        version: false, 
-        // Sunucu korumasını geçmek için sahte kimlik bilgileri
-        onMonecraftConnect: true,
-        checkTimeoutInterval: 120000,
-        // Paketleri daha yavaş ve düzenli gönder
-        viewDistance: 'tiny'
-    });
+    // Sunucu "Giriş yap" veya "Login" derse şifreyi gönderir
+    if (msg.includes('/login') || msg.includes('giris yap') || msg.includes('log in')) {
+        console.log("[SİSTEM] Giriş yapılıyor...");
+        bot.chat(`/login ${SIFRE}`);
+    }
+});
 
-    bot.on('login', () => {
-        console.log(">>> [BİLGİ] Giriş yapıldı, lobiye aktarılıyorsun...");
-    });
+bot.on('spawn', () => {
+    console.log("==========================================");
+    console.log(" BOT SUNUCUDA! (Login bekleniyor olabilir)");
+    console.log("==========================================");
+    const defaultMove = new Movements(bot);
+    defaultMove.canDig = false;
+    bot.pathfinder.setMovements(defaultMove);
+});
 
-    bot.on('spawn', () => {
-        console.log(">>> [MÜJDE] BOT ŞU AN OYUNDA! <<<");
-        setTimeout(() => {
-            bot.chat('/login 21hg21');
-        }, 5000);
-    });
+// Konsola her şeyi bas (Render üzerinden takip etmen için)
+bot.on('message', (jsonMsg) => {
+    const raw = jsonMsg.toString();
+    if (raw.trim()) console.log(`[SUNUCU] ${raw}`);
+});
 
-    bot.on('error', (err) => {
-        console.log("[HATA]:", err.message);
-    });
+// Komutlar
+bot.on('messagestr', (message) => {
+    const msg = message.toLowerCase();
+    const parcalar = msg.split(/\s+/);
 
-    bot.on('end', (reason) => {
-        console.log("[BİLGİ] Bağlantı sonlandı, sebep:", reason);
-        setTimeout(createBot, 15000); // 15 saniye bekle ki sunucu bizi spam sanmasın
-    });
-}
-
-createBot();
+    if (msg.includes(SAHIP_ISMI.toLowerCase())) {
+        if (msg.includes('home')) {
+            const h = parcalar[parcalar.indexOf('home') + 1];
+            if (h) bot.chat(`/home ${h}`);
+        }
+        if (msg.includes('tpa')) {
+            const t = parcalar[parcalar.indexOf('tpa') + 1];
+            if (t) bot.chat(`/tpa ${t}`);
+        }
+        if (msg.includes('dur')) bot.pathfinder.setGoal(null);
+    }
+});
