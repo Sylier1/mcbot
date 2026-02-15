@@ -2,95 +2,67 @@ const mineflayer = require('mineflayer');
 const { pathfinder, goals } = require('mineflayer-pathfinder');
 const http = require('http');
 
-// --- AYARLAR ---
-const SIFRE = '21hg21'; 
-const SAHIP_ISMI = 'pire';
-
-// --- RENDER WEB SUNUCUSU ---
+// --- RENDER AYARI ---
 http.createServer((req, res) => { res.end('Bot Aktif!'); }).listen(process.env.PORT || 3000);
 
+const SIFRE = '21hg21'; 
+const SAHIP = 'pire';
+
 function createBot() {
-    console.log("[SİSTEM] Temel modda bağlanılıyor...");
-    
+    // ÖNEMLİ: İsmi değiştirdim ki IP banı tetiklemesin
     const bot = mineflayer.createBot({
         host: 'oyna.wrus.net',
-        username: 'thyfanclub',
-        version: false, // Sürümü sunucuya bırakıyoruz, anında atılmayı engeller
-        disableChatSigning: true
+        username: 'hyrisklew', 
+        version: false, 
+        disableChatSigning: true,
+        connectTimeout: 30000 // 30 saniye boyunca denemeye devam et
     });
 
-    // Sadece yol bulma eklentisi
     bot.loadPlugin(pathfinder);
 
-    // Sunucudan gelen mesajları oku ve otomatik giriş yap
-    bot.on('messagestr', (message) => {
-        // Sunucu mesajlarını logda görelim ki ne olduğunu anlayalım
-        console.log(`[SUNUCU]: ${message}`); 
-        
-        if (message.toLowerCase().includes('login') || message.toLowerCase().includes('giriş yap')) {
-            setTimeout(() => {
-                bot.chat(`/login ${SIFRE}`);
-            }, 1000);
-        }
-    });
-
     bot.on('spawn', () => {
-        console.log(">>> [BAŞARI] BOT OYUNDA! <<<");
+        console.log(">>> [BAŞARI] BOT ŞU AN OYUNDA! <<<");
+        // Hemen chat'e yazma, 5 saniye bekle ki sunucu "bot bu" demesin
+        setTimeout(() => {
+            bot.chat(`/login ${SIFRE}`);
+        }, 5000);
     });
 
-    // --- SADECE İSTEDİĞİN 5 KOMUT ---
     bot.on('chat', (username, message) => {
-        if (username !== SAHIP_ISMI) return;
-
+        if (username !== SAHIP) return;
         const args = message.toLowerCase().split(' ');
         if (args[0] !== 'pire') return;
 
-        const command = args[1];
+        const cmd = args[1];
         const target = args[2];
 
-        switch (command) {
+        switch (cmd) {
             case 'takipet':
-                const tEntity = bot.players[target || username]?.entity;
-                if (tEntity) {
-                    bot.pathfinder.setGoal(new goals.GoalFollow(tEntity, 2), true);
-                    bot.chat('Seni takip ediyorum.');
-                }
+                const t = bot.players[target || username]?.entity;
+                if (t) bot.pathfinder.setGoal(new goals.GoalFollow(t, 2), true);
                 break;
             case 'dur':
                 bot.pathfinder.setGoal(null);
-                bot.chat('Durdum.');
                 break;
-            case 'tpa': 
-                if(target) bot.chat(`/tpa ${target}`); 
-                break;
-            case 'sethome': 
-                if(target) bot.chat(`/sethome ${target}`); 
-                break;
-            case 'delhome': 
-                if(target) bot.chat(`/delhome ${target}`); 
-                break;
-            case 'home': 
-                if(target) bot.chat(`/home ${target}`); 
-                break;
+            case 'tpa': if(target) bot.chat(`/tpa ${target}`); break;
+            case 'sethome': if(target) bot.chat(`/sethome ${target}`); break;
+            case 'delhome': if(target) bot.chat(`/delhome ${target}`); break;
+            case 'home': if(target) bot.chat(`/home ${target}`); break;
         }
     });
 
-    bot.on('end', (reason) => {
-        console.log(`[BİLGİ] Bağlantı koptu. Sebep: ${reason}`);
-        setTimeout(createBot, 10000);
+    // ECONNRESET hatalarını yakala ama çökme
+    bot.on('error', (err) => {
+        if (err.code === 'ECONNRESET') {
+            console.log("[LOG] Sunucu bağlantıyı reddetti, 30 saniye sonra tekrar deneyecek.");
+        } else {
+            console.log("[HATA]:", err.message);
+        }
     });
 
-    // Hataları yönet (Chunk hatalarını gizle, diğerlerini göster)
-    bot.on('error', (err) => {
-        if (err.message.includes('0x1f') || err.message.includes('Chunk') || err.message.includes('buffer')) return;
-        console.log("[HATA]:", err.message);
+    bot.on('end', () => {
+        setTimeout(createBot, 30000); // Hemen bağlanma, 30 saniye bekle
     });
 }
 
 createBot();
-
-// Render'ın çökmesini engelle
-process.on('uncaughtException', (err) => {
-    if (err.message.includes('Chunk size') || err.message.includes('buffer')) return;
-    console.log('Kritik Hata:', err.message);
-});
