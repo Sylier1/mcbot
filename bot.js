@@ -1,69 +1,99 @@
 const mineflayer = require('mineflayer');
-const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
+const { pathfinder, goals } = require('mineflayer-pathfinder');
 const http = require('http');
 
 // --- AYARLAR ---
-const SIFRE = '21hg21'; // Botun sunucu şifresi
+const SIFRE = '21hg21'; 
 const SAHIP_ISMI = 'pire';
 
-// --- RENDER UYANDIRMA SERVISI ---
-const server = http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Bot Aktif!\n');
-});
-const PORT = process.env.PORT || 3000;
-server.listen(PORT);
+// --- RENDER WEB SUNUCUSU ---
+http.createServer((req, res) => { res.end('Bot Aktif!'); }).listen(process.env.PORT || 3000);
 
-// --- BOT KURULUMU ---
-const bot = mineflayer.createBot({
-    host: 'oyna.wrus.net',
-    username: 'thyfanclub',
-    version: '1.21.11',
-    disableChatSigning: true
-});
-
-bot.loadPlugin(pathfinder);
-
-// --- OTOMATIK LOGIN SISTEMI ---
-bot.on('messagestr', (message) => {
-    const msg = message.toLowerCase();
+function createBot() {
+    console.log("[SİSTEM] Sadece temel özelliklerle bağlanılıyor...");
     
-    // Sunucu "Giriş yap" veya "Login" derse şifreyi gönderir
-    if (msg.includes('/login') || msg.includes('giris yap') || msg.includes('log in')) {
-        console.log("[SİSTEM] Giriş yapılıyor...");
-        bot.chat(`/login ${SIFRE}`);
-    }
-});
+    const bot = mineflayer.createBot({
+        host: 'oyna.wrus.net',
+        username: 'thyfanclub',
+        version: '1.21.11', // Paket hatalarını en aza indiren sürüm
+        disableChatSigning: true,
+        skipValidation: true, // Hatalı paketleri görmezden gel
+        hideErrors: true // Konsolu spamlayan hataları gizle
+    });
 
-bot.on('spawn', () => {
-    console.log("==========================================");
-    console.log(" BOT SUNUCUDA! (Login bekleniyor olabilir)");
-    console.log("==========================================");
-    const defaultMove = new Movements(bot);
-    defaultMove.canDig = false;
-    bot.pathfinder.setMovements(defaultMove);
-});
+    // Sadece yol bulma (takip etme) eklentisini yüklüyoruz
+    bot.loadPlugin(pathfinder);
 
-// Konsola her şeyi bas (Render üzerinden takip etmen için)
-bot.on('message', (jsonMsg) => {
-    const raw = jsonMsg.toString();
-    if (raw.trim()) console.log(`[SUNUCU] ${raw}`);
-});
-
-// Komutlar
-bot.on('messagestr', (message) => {
-    const msg = message.toLowerCase();
-    const parcalar = msg.split(/\s+/);
-
-    if (msg.includes(SAHIP_ISMI.toLowerCase())) {
-        if (msg.includes('home')) {
-            const h = parcalar[parcalar.indexOf('home') + 1];
-            if (h) bot.chat(`/home ${h}`);
+    // Başarıyla giriş yapıldığını anla ve şifre gir
+    bot.on('messagestr', (message) => {
+        if (message.toLowerCase().includes('login') || message.toLowerCase().includes('giriş yap')) {
+            setTimeout(() => {
+                bot.chat(`/login ${SIFRE}`);
+                console.log("[LOG] Şifre girildi!");
+            }, 2000);
         }
-        if (msg.includes('tpa')) {
-            const t = parcalar[parcalar.indexOf('tpa') + 1];
-            if (t) bot.chat(`/tpa ${t}`);
+    });
+
+    bot.on('spawn', () => {
+        console.log(">>> [BAŞARI] BOT ŞU AN OYUNDA! <<<");
+    });
+
+    // --- SADECE İSTEDİĞİN KOMUTLAR ---
+    bot.on('chat', (username, message) => {
+        if (username !== SAHIP_ISMI) return;
+
+        const args = message.toLowerCase().split(' ');
+        if (args[0] !== 'pire') return;
+
+        const command = args[1];
+        const target = args[2];
+
+        switch (command) {
+            case 'takipet':
+                const tEntity = bot.players[target || username]?.entity;
+                if (tEntity) {
+                    bot.pathfinder.setGoal(new goals.GoalFollow(tEntity, 2), true);
+                    bot.chat('Seni takip ediyorum.');
+                } else {
+                    bot.chat('Hedefi göremiyorum.');
+                }
+                break;
+            case 'dur':
+                bot.pathfinder.setGoal(null); // Takip etmeyi bırakır
+                bot.chat('Durdum.');
+                break;
+            case 'tpa': 
+                if(target) bot.chat(`/tpa ${target}`); 
+                break;
+            case 'sethome': 
+                if(target) bot.chat(`/sethome ${target}`); 
+                break;
+            case 'delhome': 
+                if(target) bot.chat(`/delhome ${target}`); 
+                break;
+            case 'home': 
+                if(target) bot.chat(`/home ${target}`); 
+                break;
         }
-        if (msg.includes('dur')) bot.pathfinder.setGoal(null);
-    }
+    });
+
+    // Bağlantı koparsa yeniden bağlan
+    bot.on('end', () => {
+        console.log("[BİLGİ] Bağlantı koptu, 10 saniye sonra tekrar deneniyor...");
+        setTimeout(createBot, 10000);
+    });
+
+    // Konsoldaki o uzun 00101010 spamlarını engellemek için filtre
+    bot.on('error', (err) => {
+        if (err.message.includes('0x1f') || err.message.includes('Chunk') || err.message.includes('undefined')) return;
+        console.log("[HATA]:", err.message);
+    });
+}
+
+createBot();
+
+// Render'ın çökmesini önleyen son koruma
+process.on('uncaughtException', (err) => {
+    if (err.message.includes('Chunk size') || err.message.includes('buffer')) return;
+    console.log('Hata yakalandı (Görmezden geliniyor):', err.message);
 });
