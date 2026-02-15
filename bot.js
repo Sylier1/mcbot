@@ -1,7 +1,5 @@
 const mineflayer = require('mineflayer');
-const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const http = require('http');
-const Vec3 = require('vec3');
 
 // --- AYARLAR ---
 const SIFRE = '21hg21'; 
@@ -11,67 +9,53 @@ const SAHIP_ISMI = 'pire';
 http.createServer((req, res) => { res.end('Bot Aktif!'); }).listen(process.env.PORT || 3000);
 
 function createBot() {
-    console.log("[SİSTEM] Temel modda başlatılıyor...");
+    console.log("[SİSTEM] Bot bağlanmayı deniyor (Zorlanmış Mod)...");
     
     const bot = mineflayer.createBot({
         host: 'oyna.wrus.net',
         username: 'thyfanclub',
-        version: false, // Otomatik sürüm eşleme (01f hatasını önlemek için en iyisi)
-        disableChatSigning: true
+        version: false, // Sunucu ne derse o olsun
+        hideErrors: true, // Karmaşık hata mesajlarını gizle
+        checkTimeoutInterval: 90000 // Sunucuya tepki süresini artır
     });
 
-    // Sadece Pathfinder yükle (Hata vermeyen tek eklenti bu)
-    bot.loadPlugin(pathfinder);
+    // HATA AYIKLAMA: Botun o an ne yaptığını görmek için
+    bot.on('stateChanged', (state) => console.log(`[DURUM]: ${state}`));
 
     bot.on('spawn', () => {
-        console.log(">>> [BAŞARI] BOT ŞU AN OYUNDA! <<<");
-        bot.chat(`/login ${SIFRE}`);
-        
-        const defaultMove = new Movements(bot);
-        bot.pathfinder.setMovements(defaultMove);
+        console.log(">>> [BAŞARI] BOT OYUNA GİRDİ! <<<");
+        // Bazı sunucular hemen mesaj atılınca botu atar, 3 saniye bekleyelim
+        setTimeout(() => {
+            bot.chat(`/login ${SIFRE}`);
+            console.log("[LOG] Giriş komutu gönderildi.");
+        }, 3000);
     });
 
-    // --- TEMEL KOMUTLAR ---
-    bot.on('chat', async (username, message) => {
+    bot.on('chat', (username, message) => {
         if (username !== SAHIP_ISMI) return;
-        const args = message.toLowerCase().split(' ');
-        if (args[0] !== 'pire') return;
-
-        const command = args[1];
-        const target = args[2];
-
-        switch (command) {
-            case 'dur':
-                bot.pathfinder.setGoal(null);
-                bot.chat('Durdum.');
-                break;
-            case 'dön':
-                bot.look(bot.entity.yaw - (Math.PI / 2), bot.entity.pitch);
-                break;
-            case 'takipet':
-                const tEntity = bot.players[target || username]?.entity;
-                if (tEntity) {
-                    bot.pathfinder.setGoal(new goals.GoalFollow(tEntity, 2), true);
-                }
-                break;
-            case 'tpa': if(target) bot.chat(`/tpa ${target}`); break;
-            case 'sethome': if(target) bot.chat(`/sethome ${target}`); break;
-            case 'home': if(target) bot.chat(`/home ${target}`); break;
-            case 'zıpla': bot.setControlState('jump', true); setTimeout(() => bot.setControlState('jump', false), 500); break;
+        if (message === 'pire gel') {
+            bot.chat('Geliyorum!');
+            // Çok basit bir zıplama testi
+            bot.setControlState('jump', true);
+            setTimeout(() => bot.setControlState('jump', false), 500);
         }
     });
 
-    // --- HATA YÖNETİMİ ---
-    bot.on('error', (err) => console.log('[HATA]:', err.message));
+    bot.on('error', (err) => {
+        // 01f veya PartialReadError buraya düşerse botu kapatıp açma, bekle
+        console.log('[LOG] Küçük bir veri hatası oluştu, ama bot hala deniyor...');
+    });
+
     bot.on('end', () => {
-        console.log('[UYARI] Bağlantı kesildi, 10 saniye sonra tekrar bağlanıyor...');
+        console.log('[UYARI] Bağlantı kapandı. 10 saniye sonra tekrar denenecek...');
         setTimeout(createBot, 10000);
     });
 }
 
 createBot();
 
-// Kritik hata koruması
+// Render'da kodun patlamasını engelleyen son kale
 process.on('uncaughtException', (err) => {
-    console.log('Hata yakalandı (Sade Mod):', err.message);
+    if (err.message.includes('undefined')) return; // PartialReadError'ı görmezden gel
+    console.log('Kritik sistem hatası:', err.message);
 });
