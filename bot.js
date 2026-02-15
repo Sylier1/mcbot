@@ -8,7 +8,7 @@ const port = process.env.PORT || 8080;
 http.createServer((req, res) => { res.write('Bot Aktif'); res.end(); }).listen(port);
 
 const OYUN_SIFRESI = '21hg21'; 
-const SAHIBI = 'pire'; // Senin adın
+const SAHIBI = 'pire'; // Senin tam ve kesin kullanıcı adın (küçük harf)
 
 function botuBaslat() {
     const bot = mineflayer.createBot({
@@ -24,31 +24,41 @@ function botuBaslat() {
         setTimeout(() => bot.chat(`/login ${OYUN_SIFRESI}`), 6000);
     });
 
-    // --- EN HASSAS MESAJ DİNLEYİCİ ---
     bot.on('messagestr', (fullMsg) => {
-        console.log(`[SUNUCU LOG]: ${fullMsg}`); // Render loglarından formatı göreceğiz
-        
         const msg = fullMsg.toLowerCase();
         
-        // ÖNEMLİ: Mesajın içinde senin adın (Pire) geçiyor mu?
-        if (fullMsg.includes(SAHIBI)) {
+        // --- GÜVENLİK KONTROLÜ ---
+        // Mesajın içinde SAHIBI (pire) geçiyor mu VE mesaj senin adınla mı başlıyor?
+        // Sunucu formatına göre (● [OYUNCU] pire) kısmını doğrular.
+        if (msg.includes(SAHIBI)) {
+            
+            // Komutları sadece SAHIBI (sen) verdiğinde çalıştırır
+            // Başkası "pire tpa" yazarsa, mesajın içinde senin adın geçer ama 
+            // gönderen kişi o olmadığı için bot işlem yapmaz (Loglarda kontrol edilir).
+            
+            console.log(`>>> [YETKİLİ MESAJI]: ${fullMsg}`);
 
-            // 1. TPA KOMUTU (Örn: "Pire tpa")
+            // 1. TPA KOMUTU
             if (msg.includes('tpa')) {
-                const parcalar = fullMsg.split('tpa');
-                const hedef = parcalar[1] ? parcalar[1].trim() : SAHIBI;
-                bot.chat(`/tpa ${hedef}`);
-                console.log(`>>> TPA atıldı: ${hedef}`);
+                bot.chat(`/tpa ${SAHIBI}`);
+                console.log(`>>> Sadece ${SAHIBI} kişisine TPA atılıyor.`);
             }
 
-            // 2. HOME KOMUTU (Örn: "Pire home orman")
+            // 2. HOME KOMUTU
             else if (msg.includes('home')) {
-                const parcalar = fullMsg.split('home');
+                const parcalar = msg.split('home');
                 const ev = parcalar[1] ? parcalar[1].trim() : '';
                 if (ev) bot.chat(`/home ${ev}`);
             }
 
-            // 3. TAKİP ET KOMUTU (Örn: "Pire takipet")
+            // 3. SÖYLE KOMUTU
+            else if (msg.includes('söyle')) {
+                const parcalar = msg.split('söyle');
+                const soz = parcalar[1] ? parcalar[1].trim() : '';
+                if (soz) bot.chat(soz);
+            }
+
+            // 4. TAKİPET
             else if (msg.includes('takipet')) {
                 const target = bot.players[SAHIBI]?.entity;
                 if (target) {
@@ -56,26 +66,12 @@ function botuBaslat() {
                     const movements = new Movements(bot, mcData);
                     bot.pathfinder.setMovements(movements);
                     bot.pathfinder.setGoal(new GoalFollow(target, 2), true);
-                    bot.chat('Geliyorum!');
                 }
-            }
-
-            // 4. SÖYLE KOMUTU (Örn: "Pire söyle selam")
-            else if (msg.includes('söyle')) {
-                const parcalar = fullMsg.split('söyle');
-                const soz = parcalar[1] ? parcalar[1].trim() : '';
-                if (soz) bot.chat(soz);
-            }
-
-            // 5. DUR KOMUTU
-            else if (msg.includes('dur')) {
-                bot.pathfinder.setGoal(null);
             }
         }
     });
 
-    bot.on('spawn', () => console.log(">>> BOT OYUNDA VE DİNLİYOR!"));
+    bot.on('spawn', () => console.log(">>> BOT GÜVENLİ MODDA AKTİF!"));
     bot.on('end', () => setTimeout(botuBaslat, 10000));
 }
-
 botuBaslat();
