@@ -1,85 +1,73 @@
 const mineflayer = require('mineflayer');
-const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
-const pvp = require('mineflayer-pvp').plugin;
-const armorManager = require('mineflayer-armor-manager');
+const http = require('http');
 
-const SAHIP_ISMI = 'pire';
-
-const bot = mineflayer.createBot({
-    host: 'oyna.wrus.net',
-    username: 'thyfanclub',
-    version: '1.21.6', // Wrus'un kabul ettiği en stabil 1.21 protokolü
-    disableChatSigning: true,
-    checkTimeoutInterval: 120000,
-    brand: 'vanilla' // Sunucuya "ben normal oyuncuyum" der
+// 1. RENDER'IN BOTU KAPATMASINI ENGELLEYEN SİSTEM (ŞART)
+http.createServer((req, res) => {
+    res.writeHead(200, {'Content-Type': 'text/plain'});
+    res.end('Bot 7/24 Aktif!\n');
+}).listen(8080, () => {
+    console.log(">>> [SİSTEM] Web sunucusu 8080 portunda açıldı (Render için).");
 });
 
-// EKLENTİ YÜKLEYİCİ (Hata vermez, sadece çalışır)
-bot.once('inject_allowed', () => {
-    bot.loadPlugin(pathfinder);
-    bot.loadPlugin(pvp);
-    bot.loadPlugin(armorManager);
-    console.log(">>> Sistemler senkronize edildi.");
-});
+const OYUN_SIFRESI = '21hg21'; // <--- BURAYI KENDİ ŞİFRENLE DEĞİŞTİR!
 
-bot.on('spawn', () => {
-    console.log("==========================================");
-    console.log(" BOT İÇERİDE! WRUS KORUMASI AŞILDI.");
-    console.log(" Komutlar aktif: takipet, saldır, dur, tpa");
-    console.log("==========================================");
+function botuBaslat() {
+    console.log(">>> [SİSTEM] Wrus sunucusuna bağlanılıyor...");
 
-    const defaultMove = new Movements(bot);
-    defaultMove.canDig = false;
-    defaultMove.allowSprinting = true;
-    bot.pathfinder.setMovements(defaultMove);
-});
+    const bot = mineflayer.createBot({
+        host: 'oyna.wrus.net',
+        username: 'thyfanclub',
+        version: '1.21.8',
+        disableChatSigning: true
+    });
 
-// GELİŞMİŞ CHAT OKUYUCU
-bot.on('messagestr', (message) => {
-    const msg = message.toLowerCase();
-    
-    // Sadece 'pire' yazan mesajlara bakar
-    if (!msg.includes(SAHIP_ISMI.toLowerCase())) return;
+    // 2. TAKILMAYI ÖNLEYEN KÖRLEME GİRİŞ
+    // Bot sunucuya "merhaba" dediği an (dünyayı beklemeden) sayacı başlatır.
+    bot.on('login', () => {
+        console.log(">>> [SİSTEM] Sunucuya giriş yapıldı, lobi atlatılıyor...");
+        
+        setTimeout(() => {
+            console.log(">>> [SİSTEM] Şifre zorla gönderiliyor (Körleme Yöntemi)...");
+            bot.chat(`/login ${OYUN_SIFRESI}`);
+        }, 6000); // 6 saniye bekle ve şifreyi çak
+    });
 
-    if (msg.includes('gel') || msg.includes('takip')) {
-        const target = bot.players[SAHIP_ISMI]?.entity;
-        if (target) {
-            bot.setControlState('sprint', true);
-            bot.pathfinder.setGoal(new goals.GoalFollow(target, 1), true);
-            bot.chat("Geliyorum!");
+    // 3. MESAJ TETİKLEYİCİ (GARANTİ YÖNTEM)
+    // Eğer sunucu ekrana "Lütfen giriş yapın" yazarsa bot bunu görüp anında şifreyi yapıştırır.
+    bot.on('messagestr', (mesaj) => {
+        console.log(`[WRUS] ${mesaj}`);
+        
+        const kucukMesaj = mesaj.toLowerCase();
+        if (kucukMesaj.includes('/login') || kucukMesaj.includes('giriş yap')) {
+            console.log(">>> [SİSTEM] Giriş isteği yakalandı! Şifre yazılıyor...");
+            bot.chat(`/login ${OYUN_SIFRESI}`);
         }
-    }
+    });
 
-    if (msg.includes('saldır')) {
-        const words = msg.split(' ');
-        const targetName = words[words.length - 1]; 
-        const target = bot.nearestEntity(e => (e.username && e.username.toLowerCase() === targetName));
-        if (target) {
-            bot.chat(targetName + " hedefine saldırıyorum.");
-            bot.pvp.attack(target);
-        }
-    }
+    // 4. ANTİ-AFK SİSTEMİ (ATILMAMAK İÇİN)
+    bot.on('spawn', () => {
+        console.log(">>> [BAŞARILI] Bot başarıyla dünyaya ayak bastı!");
+        
+        // Her 4 dakikada bir zıpla ve etrafa bak
+        setInterval(() => {
+            bot.setControlState('jump', true);
+            setTimeout(() => bot.setControlState('jump', false), 500);
+            bot.look(Math.random() * Math.PI * 2, 0); 
+            console.log(">>> [AFK] Bot hareket etti.");
+        }, 240000); 
+    });
 
-    if (msg.includes('dur')) {
-        bot.pathfinder.setGoal(null);
-        bot.pvp.stop();
-        bot.chat("Durdum.");
-    }
+    // 5. OTO-YENİDEN BAĞLANMA (7/24 İÇİN)
+    bot.on('end', (sebep) => {
+        console.log(`>>> [HATA] Bot sunucudan düştü veya atıldı. Sebep: ${sebep}`);
+        console.log(">>> [SİSTEM] 15 saniye içinde yeniden bağlanılıyor...");
+        setTimeout(botuBaslat, 15000);
+    });
 
-    if (msg.includes('tpa')) bot.chat("/tpa " + SAHIP_ISMI);
-});
+    bot.on('error', (err) => {
+        console.log(`>>> [CRASH] Hata oluştu: ${err.message}`);
+    });
+}
 
-// Su Kontrolü
-bot.on('physicsTick', () => {
-    if (bot.isInWater) bot.setControlState('jump', true);
-});
-
-// HATA AYIKLAMA (Sadece kritik olanlar)
-bot.on('kicked', (reason) => {
-    console.log("Atılma Detayı:", JSON.stringify(reason));
-});
-
-bot.on('error', (err) => {
-    if (err.message.includes('packet')) return;
-    console.log("Sistem Hatası:", err.message);
-});
+// Botu ilk kez çalıştır
+botuBaslat();
