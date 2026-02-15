@@ -21,7 +21,7 @@ function createBot() {
     const bot = mineflayer.createBot({
         host: 'oyna.wrus.net',
         username: 'thyfanclub',
-        version: false, // Sunucuyla otomatik anlasması en saglıklısıdır
+        version: '1.21.11', // Sunucuyla otomatik anlasması en saglıklısıdır
         disableChatSigning: true
     });
 
@@ -115,3 +115,4 @@ function createBot() {
 }
 
 createBot();
+
