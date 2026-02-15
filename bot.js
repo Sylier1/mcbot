@@ -1,94 +1,69 @@
 const mineflayer = require('mineflayer');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
-const GoalFollow = goals.GoalFollow;
 const http = require('http');
 
-const port = process.env.PORT || 8080;
-http.createServer((req, res) => { res.write('Bot Aktif'); res.end(); }).listen(port);
+// --- AYARLAR ---
+const SIFRE = '21hg21'; // Botun sunucu şifresi
+const SAHIP_ISMI = 'pire';
 
-const OYUN_SIFRESI = '21hg21'; 
-const SAHIBI = 'pire'; 
-let botTeamChatModunda = false; // Botun şu an hangi modda olduğunu tutar
+// --- RENDER UYANDIRMA SERVISI ---
+const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Bot Aktif!\n');
+});
+const PORT = process.env.PORT || 3000;
+server.listen(PORT);
 
-function botuBaslat() {
-    const bot = mineflayer.createBot({
-        host: 'oyna.wrus.net',
-        username: 'thyfanclub',
-        version: '1.21.11',
-        disableChatSigning: true
-    });
+// --- BOT KURULUMU ---
+const bot = mineflayer.createBot({
+    host: 'oyna.wrus.net',
+    username: 'thyfanclub',
+    version: '1.21.11',
+    disableChatSigning: true
+});
 
-    bot.loadPlugin(pathfinder);
+bot.loadPlugin(pathfinder);
 
-    // Botun mesaj gönderme motoru
-    const botCevapVer = (mesaj) => {
-        // Eğer bot teamchat modundaysa direk yazar, değilse genelden yazar
-        bot.chat(mesaj); 
-    };
+// --- OTOMATIK LOGIN SISTEMI ---
+bot.on('messagestr', (message) => {
+    const msg = message.toLowerCase();
+    
+    // Sunucu "Giriş yap" veya "Login" derse şifreyi gönderir
+    if (msg.includes('/login') || msg.includes('giris yap') || msg.includes('log in')) {
+        console.log("[SİSTEM] Giriş yapılıyor...");
+        bot.chat(`/login ${SIFRE}`);
+    }
+});
 
-    bot.on('login', () => {
-        setTimeout(() => bot.chat(`/login ${OYUN_SIFRESI}`), 6000);
-    });
+bot.on('spawn', () => {
+    console.log("==========================================");
+    console.log(" BOT SUNUCUDA! (Login bekleniyor olabilir)");
+    console.log("==========================================");
+    const defaultMove = new Movements(bot);
+    defaultMove.canDig = false;
+    bot.pathfinder.setMovements(defaultMove);
+});
 
-    bot.on('messagestr', (fullMsg) => {
-        const msg = fullMsg.toLowerCase();
-        
-        if (msg.includes(SAHIBI)) {
-            
-            // --- MOD DEĞİŞTİRME KOMUTLARI ---
-            if (msg.includes('teamchat aç')) {
-                if (!botTeamChatModunda) {
-                    bot.chat('/teamchat'); // Modu açmak için komutu gönderir
-                    botTeamChatModunda = true;
-                    console.log(">>> [MOD] Teamchat modu AKTİF.");
-                    // Mod açıldıktan kısa süre sonra onay verir
-                    setTimeout(() => bot.chat('Bildirimler artık takım sohbetine gelecek.'), 1000);
-                }
-                return;
-            }
+// Konsola her şeyi bas (Render üzerinden takip etmen için)
+bot.on('message', (jsonMsg) => {
+    const raw = jsonMsg.toString();
+    if (raw.trim()) console.log(`[SUNUCU] ${raw}`);
+});
 
-            if (msg.includes('teamchat kapat')) {
-                if (botTeamChatModunda) {
-                    bot.chat('/teamchat'); // Modu kapatmak için tekrar gönderir
-                    botTeamChatModunda = false;
-                    console.log(">>> [MOD] Teamchat modu KAPALI.");
-                    setTimeout(() => bot.chat('Bildirimler artık genel sohbete gelecek.'), 1000);
-                }
-                return;
-            }
+// Komutlar
+bot.on('messagestr', (message) => {
+    const msg = message.toLowerCase();
+    const parcalar = msg.split(/\s+/);
 
-            // --- DİĞER KOMUTLAR ---
-            if (msg.includes('tpa')) {
-                bot.chat(`/tpa ${SAHIBI}`);
-                botCevapVer('TPA isteği gönderildi.');
-            }
-            else if (msg.includes('home')) {
-                const ev = msg.split('home')[1]?.trim();
-                if (ev) {
-                    bot.chat(`/home ${ev}`);
-                    botCevapVer(`${ev} evine gidiliyor.`);
-                }
-            }
-            else if (msg.includes('takipet')) {
-                const target = bot.players[SAHIBI]?.entity;
-                if (target) {
-                    const mcData = require('minecraft-data')(bot.version);
-                    bot.pathfinder.setGoal(new GoalFollow(target, 2), true);
-                    botCevapVer('Seni takip ediyorum.');
-                }
-            }
-            else if (msg.includes('dur')) {
-                bot.pathfinder.setGoal(null);
-                botCevapVer('Duruyorum.');
-            }
-            else if (msg.includes('söyle')) {
-                const soz = fullMsg.split('söyle')[1]?.trim();
-                if (soz) bot.chat(soz);
-            }
+    if (msg.includes(SAHIP_ISMI.toLowerCase())) {
+        if (msg.includes('home')) {
+            const h = parcalar[parcalar.indexOf('home') + 1];
+            if (h) bot.chat(`/home ${h}`);
         }
-    });
-
-    bot.on('spawn', () => console.log(">>> BOT HAZIR VE KOMUT BEKLİYOR!"));
-    bot.on('end', () => setTimeout(botuBaslat, 10000));
-}
-botuBaslat();
+        if (msg.includes('tpa')) {
+            const t = parcalar[parcalar.indexOf('tpa') + 1];
+            if (t) bot.chat(`/tpa ${t}`);
+        }
+        if (msg.includes('dur')) bot.pathfinder.setGoal(null);
+    }
+});
