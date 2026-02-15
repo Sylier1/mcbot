@@ -1,73 +1,83 @@
 const mineflayer = require('mineflayer');
+const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
+const GoalFollow = goals.GoalFollow;
 const http = require('http');
 
-// 1. RENDER'IN BOTU KAPATMASINI ENGELLEYEN SİSTEM (ŞART)
-http.createServer((req, res) => {
-    res.writeHead(200, {'Content-Type': 'text/plain'});
-    res.end('Bot 7/24 Aktif!\n');
-}).listen(8080, () => {
-    console.log(">>> [SİSTEM] Web sunucusu 8080 portunda açıldı (Render için).");
-});
+// Render Canlı Tutma Sunucusu
+http.createServer((req, res) => { res.write('Bot Aktif'); res.end(); }).listen(8080);
 
-const OYUN_SIFRESI = '21hg21'; // <--- BURAYI KENDİ ŞİFRENLE DEĞİŞTİR!
+const OYUN_SIFRESI = '21hg21'; // Kendi şifreni yaz
+const SAHIBI = 'Pire'; // Sadece senin komutlarını dinlemesi için
 
 function botuBaslat() {
-    console.log(">>> [SİSTEM] Wrus sunucusuna bağlanılıyor...");
-
     const bot = mineflayer.createBot({
         host: 'oyna.wrus.net',
         username: 'thyfanclub',
-        version: '1.21.8',
+        version: '1.21.11',
         disableChatSigning: true
     });
 
-    // 2. TAKILMAYI ÖNLEYEN KÖRLEME GİRİŞ
-    // Bot sunucuya "merhaba" dediği an (dünyayı beklemeden) sayacı başlatır.
+    bot.loadPlugin(pathfinder);
+
     bot.on('login', () => {
-        console.log(">>> [SİSTEM] Sunucuya giriş yapıldı, lobi atlatılıyor...");
-        
-        setTimeout(() => {
-            console.log(">>> [SİSTEM] Şifre zorla gönderiliyor (Körleme Yöntemi)...");
-            bot.chat(`/login ${OYUN_SIFRESI}`);
-        }, 6000); // 6 saniye bekle ve şifreyi çak
+        console.log(">>> [LOG] Giriş yapılıyor...");
+        setTimeout(() => bot.chat(`/login ${OYUN_SIFRESI}`), 6000);
     });
 
-    // 3. MESAJ TETİKLEYİCİ (GARANTİ YÖNTEM)
-    // Eğer sunucu ekrana "Lütfen giriş yapın" yazarsa bot bunu görüp anında şifreyi yapıştırır.
-    bot.on('messagestr', (mesaj) => {
-        console.log(`[WRUS] ${mesaj}`);
-        
-        const kucukMesaj = mesaj.toLowerCase();
-        if (kucukMesaj.includes('/login') || kucukMesaj.includes('giriş yap')) {
-            console.log(">>> [SİSTEM] Giriş isteği yakalandı! Şifre yazılıyor...");
-            bot.chat(`/login ${OYUN_SIFRESI}`);
+    // --- GELİŞMİŞ KOMUT SİSTEMİ ---
+    bot.on('messagestr', (fullMsg) => {
+        console.log(`[SUNUCU] ${fullMsg}`);
+        const msg = fullMsg.toLowerCase();
+
+        // Sadece Sahipten (Pire) gelen mesajları kontrol et
+        if (fullMsg.includes(SAHIBI)) {
+
+            // 1. HOME KOMUTU: "home evismi" yazarsan
+            if (msg.includes('home ')) {
+                const homeIsmi = fullMsg.split('home ')[1];
+                if (homeIsmi) {
+                    bot.chat(`/home ${homeIsmi.trim()}`);
+                    console.log(`>>> [KOMUT] ${homeIsmi} adlı eve gidiliyor.`);
+                }
+            }
+
+            // 2. TPA KOMUTU: "tpa oyuncuismi" yazarsan
+            else if (msg.includes('tpa ')) {
+                const oyuncuIsmi = fullMsg.split('tpa ')[1];
+                if (oyuncuIsmi) {
+                    bot.chat(`/tpa ${oyuncuIsmi.trim()}`);
+                    console.log(`>>> [KOMUT] ${oyuncuIsmi} kişisine TPA atıldı.`);
+                }
+            }
+
+            // 3. TAKİPET KOMUTU: "takipet oyuncuismi" yazarsan
+            else if (msg.includes('takipet ')) {
+                const hedefIsim = fullMsg.split('takipet ')[1]?.trim();
+                const hedefPlayer = bot.players[hedefIsim];
+
+                if (hedefPlayer && hedefPlayer.entity) {
+                    const mcData = require('minecraft-data')(bot.version);
+                    const movements = new Movements(bot, mcData);
+                    bot.pathfinder.setMovements(movements);
+                    bot.pathfinder.setGoal(new GoalFollow(hedefPlayer.entity, 2), true);
+                    console.log(`>>> [KOMUT] ${hedefIsim} takip ediliyor.`);
+                } else {
+                    bot.chat(`${hedefIsim} isimli kişiyi göremiyorum veya çok uzakta!`);
+                }
+            }
+
+            // 4. DUR KOMUTU: Takibi bırakması için
+            else if (msg.includes('dur')) {
+                bot.pathfinder.setGoal(null);
+                console.log(">>> [KOMUT] Takip durduruldu.");
+            }
         }
     });
 
-    // 4. ANTİ-AFK SİSTEMİ (ATILMAMAK İÇİN)
-    bot.on('spawn', () => {
-        console.log(">>> [BAŞARILI] Bot başarıyla dünyaya ayak bastı!");
-        
-        // Her 4 dakikada bir zıpla ve etrafa bak
-        setInterval(() => {
-            bot.setControlState('jump', true);
-            setTimeout(() => bot.setControlState('jump', false), 500);
-            bot.look(Math.random() * Math.PI * 2, 0); 
-            console.log(">>> [AFK] Bot hareket etti.");
-        }, 240000); 
-    });
-
-    // 5. OTO-YENİDEN BAĞLANMA (7/24 İÇİN)
-    bot.on('end', (sebep) => {
-        console.log(`>>> [HATA] Bot sunucudan düştü veya atıldı. Sebep: ${sebep}`);
-        console.log(">>> [SİSTEM] 15 saniye içinde yeniden bağlanılıyor...");
-        setTimeout(botuBaslat, 15000);
-    });
-
-    bot.on('error', (err) => {
-        console.log(`>>> [CRASH] Hata oluştu: ${err.message}`);
-    });
+    // Otomatik Yeniden Bağlanma
+    bot.on('spawn', () => console.log(">>> [BAŞARILI] Bot oyunda ve komutlarını dinliyor!"));
+    bot.on('end', () => setTimeout(botuBaslat, 10000));
+    bot.on('error', (err) => console.log("Hata:", err.message));
 }
 
-// Botu ilk kez çalıştır
 botuBaslat();
