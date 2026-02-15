@@ -1,7 +1,7 @@
 const mineflayer = require('mineflayer');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const pvp = require('mineflayer-pvp').plugin;
-const armorManager = require('mineflayer-armor-manager')(mineflayer);
+const armorManager = require('mineflayer-armor-manager'); // DÜZELTİLDİ
 const http = require('http');
 const Vec3 = require('vec3');
 
@@ -9,170 +9,90 @@ const Vec3 = require('vec3');
 const SIFRE = '21hg21'; 
 const SAHIP_ISMI = 'pire';
 
-// --- RENDER'I UYANIK TUTACAK WEB SUNUCUSU ---
-const server = http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Bot Aktif ve Dinliyor!\n');
-});
-server.listen(process.env.PORT || 3000, () => {
-    console.log("[SİSTEM] Web sunucusu başlatıldı (Port: 3000).");
-});
+// --- RENDER WEB SERVISI (Live görünmesi için) ---
+http.createServer((req, res) => { res.end('Bot Aktif!'); }).listen(process.env.PORT || 3000);
 
-// --- BOT BAŞLATMA FONKSİYONU ---
-function baslat() {
-    console.log("[SİSTEM] Minecraft botu başlatılıyor...");
+// --- BOTU BAŞLAT ---
+function startBot() {
+    console.log("[SİSTEM] Bot başlatılıyor...");
     
     const bot = mineflayer.createBot({
         host: 'oyna.wrus.net',
         username: 'thyfanclub',
-        version: '1.21.11', // İstediğin gibi sürüm sabitlendi
+        version: '1.21.11', // NOT: 1.21.11 hataya sebep oluyorsa bunu '1.21.1' yap
         disableChatSigning: true
     });
 
-    // Eklentileri Yükle
+    // Eklentileri Doğru Şekilde Yükle
     bot.loadPlugin(pathfinder);
     bot.loadPlugin(pvp);
-    bot.loadPlugin(armorManager);
-
-    // --- BAĞLANTI DURUMLARI VE LOGLAR ---
-    bot.on('login', () => {
-        console.log(">>> [LOG] Sunucuya bağlanıldı, harita yükleniyor...");
-    });
+    bot.loadPlugin(armorManager); // DÜZELTİLDİ: TypeError hatası burada çözüldü
 
     bot.on('spawn', () => {
-        console.log("==========================================");
-        console.log(" >>> BOT OYUNDA! KOMUT BEKLENİYOR. <<< ");
-        console.log("==========================================");
+        console.log(">>> [BAŞARI] BOT SUNUCUDA! <<<");
+        bot.chat(`/login ${SIFRE}`);
         
-        // Normal yürürken blok kırmasını engelle
         const defaultMove = new Movements(bot);
         defaultMove.canDig = false;
         bot.pathfinder.setMovements(defaultMove);
     });
 
-    bot.on('error', (err) => {
-        console.log(">>> [HATA] Bir sorun oluştu:", err.message);
-    });
-
-    bot.on('kicked', (sebep) => {
-        console.log(">>> [ATILDI] Sunucu botu attı. Sebep:", sebep);
-    });
-
-    bot.on('end', () => {
-        console.log(">>> [BİLGİ] Bağlantı koptu. 10 saniye içinde yeniden bağlanılıyor...");
-        setTimeout(baslat, 10000);
-    });
-
-    // --- OTOMATİK GİRİŞ (LOGIN) ---
-    bot.on('messagestr', (message) => {
-        const msg = message.toLowerCase();
-        // Sadece sunucu "giriş yap" tarzı bir şey derse şifre girer
-        if (msg.includes('/login') || msg.includes('giris yap') || msg.includes('log in')) {
-            console.log(">>> [LOG] Şifre giriliyor...");
-            bot.chat(`/login ${SIFRE}`);
-        }
-    });
-
-    // --- GELİŞMİŞ KOMUT SİSTEMİ ---
+    // --- GELİŞMİŞ KOMUTLAR ---
     bot.on('chat', async (username, message) => {
-        // Sadece sahip komut verebilir
         if (username !== SAHIP_ISMI) return;
 
-        // Mesajı küçük harflere çevir ve kelimelere ayır
-        const argumanlar = message.toLowerCase().split(' ');
-        
-        // Komutlar sahibin ismiyle başlamalı (Örn: "pire saldır ahmet")
-        if (argumanlar[0] !== SAHIP_ISMI.toLowerCase()) return;
+        const args = message.toLowerCase().split(' ');
+        if (args[0] !== 'pire') return;
 
-        const komut = argumanlar[1]; // Örn: saldır, dur, dön
-        const hedef = argumanlar[2]; // Örn: ahmet, evim
+        const command = args[1];
+        const targetName = args[2];
 
-        if (!komut) return; // Sadece "pire" yazıp bırakırsa işlem yapma
+        // Zırhları otomatik giy (Eğer eklenti hazırsa)
+        if (bot.armorManager) bot.armorManager.equipAll();
 
-        // Her komut öncesi en iyi zırhı giymesini sağla
-        bot.armorManager.equipAll();
-
-        switch (komut) {
+        switch (command) {
             case 'dur':
                 bot.pathfinder.setGoal(null);
                 bot.pvp.stop();
-                bot.chat('Emredersin, durdum.');
+                bot.chat('Durdum.');
                 break;
-
             case 'dön':
-                // 90 derece sağa döner
-                bot.look(bot.entity.yaw - (Math.PI / 2), bot.entity.pitch, true);
+                bot.look(bot.entity.yaw - (Math.PI / 2), bot.entity.pitch);
                 break;
-
             case 'takipet':
-                const takipEdilecek = bot.players[hedef || username]?.entity;
-                if (takipEdilecek) {
-                    bot.pathfinder.setGoal(new goals.GoalFollow(takipEdilecek, 2), true);
-                    bot.chat('Takip ediyorum!');
-                } else {
-                    bot.chat('Seni veya hedefi göremiyorum.');
-                }
+                const tTarget = bot.players[targetName || username]?.entity;
+                if (tTarget) bot.pathfinder.setGoal(new goals.GoalFollow(tTarget, 2), true);
                 break;
-
             case 'saldır':
-                // Belirtilen hedefe veya yakındaki yaratığa saldırır
-                const pvpTarget = bot.players[hedef]?.entity || bot.nearestEntity(e => e.type === 'mob');
-                if (pvpTarget) {
-                    const silah = bot.inventory.items().find(i => i.name.includes('sword') || i.name.includes('axe'));
-                    if (silah) await bot.equip(silah, 'hand');
-                    bot.pvp.attack(pvpTarget);
-                    bot.chat('Saldırıyorum!');
-                } else {
-                    bot.chat('Saldıracak hedef yok.');
-                }
+                const pTarget = bot.players[targetName]?.entity || bot.nearestEntity(e => e.type === 'mob');
+                if (pTarget) bot.pvp.attack(pTarget);
                 break;
-
             case 'kaz':
-                const kazilacakBlok = bot.blockAtCursor(4);
-                if (kazilacakBlok) {
-                    const kazma = bot.inventory.items().find(i => i.name.includes('pickaxe'));
-                    if (kazma) await bot.equip(kazma, 'hand');
-                    await bot.dig(kazilacakBlok);
-                } else {
-                    bot.chat('Önümde kazacak blok yok.');
-                }
+                const block = bot.blockAtCursor(4);
+                if (block) await bot.dig(block);
                 break;
-
             case 'yolyap':
-                const blok = bot.inventory.items().find(i => i.name.includes('stone') || i.name.includes('dirt') || i.name.includes('planks') || i.name.includes('block'));
-                if (blok) {
-                    await bot.equip(blok, 'hand');
-                    const altBlok = bot.blockAt(bot.entity.position.offset(0, -1, 0));
-                    await bot.placeBlock(altBlok, new Vec3(0, 1, 0)).catch(() => bot.chat('Buraya yol yapamam, uygun değil!'));
-                } else {
-                    bot.chat('Envanterimde blok kalmadı!');
+                const b = bot.inventory.items().find(i => i.name.includes('stone') || i.name.includes('dirt') || i.name.includes('block'));
+                if (b) {
+                    await bot.equip(b, 'hand');
+                    const ref = bot.blockAt(bot.entity.position.offset(0, -1, 0));
+                    await bot.placeBlock(ref, new Vec3(0, 1, 0)).catch(() => {});
                 }
                 break;
-
-            case 'tpa':
-                if (hedef) bot.chat(`/tpa ${hedef}`);
-                break;
-
-            case 'sethome':
-                if (hedef) bot.chat(`/sethome ${hedef}`);
-                break;
-
-            case 'delhome':
-                if (hedef) bot.chat(`/delhome ${hedef}`);
-                break;
-
-            case 'home':
-                if (hedef) bot.chat(`/home ${hedef}`);
-                break;
+            case 'tpa': if(targetName) bot.chat(`/tpa ${targetName}`); break;
+            case 'sethome': if(targetName) bot.chat(`/sethome ${targetName}`); break;
+            case 'delhome': if(targetName) bot.chat(`/delhome ${targetName}`); break;
+            case 'home': if(targetName) bot.chat(`/home ${targetName}`); break;
         }
     });
+
+    bot.on('error', (err) => console.log('Hata:', err.message));
+    bot.on('end', () => setTimeout(startBot, 10000));
 }
 
-// Botu ilk kez başlat
-baslat();
+startBot();
 
-// --- ÇÖKME KORUMASI ---
-// Eğer kodda küçük bir hata olursa (örn: undefined), bot tamamen kapanmasın diye bunu ekliyoruz.
+// Kritik Hata Koruması (Botun çökmesini engeller)
 process.on('uncaughtException', (err) => {
-    console.log("Kritik hata atlatıldı (Bot kapanmayacak):", err.message);
+    console.log('Kritik hata yakalandı:', err.message);
 });
