@@ -1,33 +1,46 @@
 const mineflayer = require('mineflayer');
-const { pathfinder, goals } = require('mineflayer-pathfinder');
+const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const http = require('http');
 
-// --- RENDER AYARI ---
+// RENDER/UPTIME AYARI
 http.createServer((req, res) => { res.end('Bot Aktif!'); }).listen(process.env.PORT || 3000);
 
 const SIFRE = '21hg21'; 
-const SAHIP = 'pire';
+const SAHIP = 'Sylier';
 
 function createBot() {
-    // ÖNEMLİ: İsmi değiştirdim ki IP banı tetiklemesin
     const bot = mineflayer.createBot({
         host: 'oyna.wrus.net',
         username: 'hyrisklew', 
-        version: false, 
+        version: false, // Sunucu sürümünü otomatik algılar
         disableChatSigning: true,
-        connectTimeout: 30000 // 30 saniye boyunca denemeye devam et
+        connectTimeout: 30000,
+        // GÖRÜŞ MESAFESİ: Farmın çalışması için chunk yüklemesini artırıyoruz
+        viewDistance: "far", // 'tiny', 'short', 'normal', 'far' seçenekleri vardır
     });
 
     bot.loadPlugin(pathfinder);
 
     bot.on('spawn', () => {
-        console.log(">>> [BAŞARI] BOT ŞU AN OYUNDA! <<<");
-        // Hemen chat'e yazma, 5 saniye bekle ki sunucu "bot bu" demesin
+        console.log(">>> [BAŞARI] BOT FARM BÖLGESİNDE! <<<");
+        
+        // Giriş Yapma
         setTimeout(() => {
             bot.chat(`/login ${SIFRE}`);
-        }, 5000);
+        }, 3000);
+
+        // AFK KALMA / FARM TETİKLEME MANTIĞI
+        // Her 30 saniyede bir hafifçe sağa sola bakarak sunucuyu kandırır
+        setInterval(() => {
+            if (bot.entity) {
+                const yaw = bot.entity.yaw + (Math.random() * 0.5 - 0.25);
+                const pitch = bot.entity.pitch + (Math.random() * 0.5 - 0.25);
+                bot.look(yaw, pitch);
+            }
+        }, 30000);
     });
 
+    // KOMUTLAR
     bot.on('chat', (username, message) => {
         if (username !== SAHIP) return;
         const args = message.toLowerCase().split(' ');
@@ -37,31 +50,38 @@ function createBot() {
         const target = args[2];
 
         switch (cmd) {
-            case 'takipet':
-                const t = bot.players[target || username]?.entity;
-                if (t) bot.pathfinder.setGoal(new goals.GoalFollow(t, 2), true);
+            case 'gel': // Yanına çağırır
+                const p = bot.players[username]?.entity;
+                if (p) {
+                    const mcData = require('minecraft-data')(bot.version);
+                    bot.pathfinder.setMovements(new Movements(bot, mcData));
+                    bot.pathfinder.setGoal(new goals.GoalFollow(p, 1), true);
+                }
                 break;
             case 'dur':
                 bot.pathfinder.setGoal(null);
                 break;
             case 'tpa': if(target) bot.chat(`/tpa ${target}`); break;
-            case 'sethome': if(target) bot.chat(`/sethome ${target}`); break;
-            case 'delhome': if(target) bot.chat(`/delhome ${target}`); break;
-            case 'home': if(target) bot.chat(`/home ${target}`); break;
+            case 'tpaccept': bot.chat('/tpaccept'); break;
+            case 'zıpla': // AFK mekanizması için manuel test
+                bot.setControlState('jump', true);
+                setTimeout(() => bot.setControlState('jump', false), 500);
+                break;
         }
     });
 
-    // ECONNRESET hatalarını yakala ama çökme
+    // HATA YÖNETİMİ
     bot.on('error', (err) => {
-        if (err.code === 'ECONNRESET') {
-            console.log("[LOG] Sunucu bağlantıyı reddetti, 30 saniye sonra tekrar deneyecek.");
+        if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED') {
+            console.log("[LOG] Bağlantı reddedildi, 30sn sonra tekrar denenecek.");
         } else {
             console.log("[HATA]:", err.message);
         }
     });
 
-    bot.on('end', () => {
-        setTimeout(createBot, 30000); // Hemen bağlanma, 30 saniye bekle
+    bot.on('end', (reason) => {
+        console.log(`[!] Bağlantı koptu (${reason}), yeniden bağlanılıyor...`);
+        setTimeout(createBot, 30000);
     });
 }
 
